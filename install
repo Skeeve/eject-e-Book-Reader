@@ -1,0 +1,74 @@
+#!/bin/bash
+applications="/Applications"
+
+function installer() {
+    theapp="$1"
+
+    echo
+    echo "Getting the version"
+    version=$(grep "^-- V[0-9]*\.[0-9]*" "$theapp.applescript" | head -1 | cut -d' ' -f2 )
+    if [ -z "$version" ] ; then
+        echo >&2 "Version not found in $theapp.applescript"
+        exit 12
+    fi
+
+    echo
+    echo "Creating iconset for $theapp."
+    icondir=applet.iconset
+    mkdir -p  $icondir || exit 12
+    for size in 512 256 128 32 16 ; do
+        (( dsize = size + size ))
+        sips -z ${size} ${size} "$theapp.png" --out $icondir/icon_${size}x${size}.png || exit 10
+        sips -z ${dsize} ${dsize} "$theapp.png" --out $icondir/icon_${size}x${size}@2x.png || exit 11
+    done
+
+    echo
+    echo "Creating icon for $theapp."
+    iconutil -c icns applet.iconset || exit 9
+
+    echo
+    echo "Cleaning up iconset of $theapp."
+    rm -rf applet.iconset || exit 8
+
+    echo
+    echo "Compiling $theapp"
+    osacompile  -o "$theapp.app" "$theapp".applescript || exit 1
+
+    echo
+    echo "Adding $theapp's icon"
+    mv applet.icns "$theapp.app/Contents/Resources/"
+
+    echo
+    echo "Writeprotect $theapp"
+    chmod -w "$theapp.app/Contents/Resources/Scripts/main.scpt" || exit 6
+
+    if [ "$mode" == "zip" ] ; then
+
+        echo
+        echo "Zipping $theapp"
+        zip -rm "$theapp-$version.zip" "$theapp.app" || exit 11
+
+    elif [ "$mode" == "install" ] ; then
+
+        if [ -r "$applications/$theapp.app" ] ; then
+            echo
+            echo "Deleting old $theapp from $applications"
+            chmod +w "$applications/$theapp.app/Contents/Resources/Scripts/main.scpt" || exit 7
+            rm -rf "$applications/$theapp.app" || exit 2
+        fi
+
+        echo
+        echo "Moving $theapp to $applications"
+        mv -f "$theapp.app" "$applications" || exit 3
+    fi
+
+    echo
+    echo "$theapp Done"
+}
+
+mode="install"
+if [ "$1" == "build" -o "$1" == "zip" ] ; then
+    mode="$1"
+fi
+
+installer "eject e-Book Reader"
